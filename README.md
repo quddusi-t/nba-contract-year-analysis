@@ -36,14 +36,34 @@ python -m venv .venv && .venv/bin/pip install -r requirements.txt
 The sample data has a known contract-year effect built in (~+0.8 BPM), so you can
 verify the whole pipeline recovers it before touching real data.
 
-## Using real data
+## Two ways to get data in
+
+Both run the **same code** (`src/ingest.py` → `src/clean.py` → `src/features.py`), so
+they always agree on what valid data is. Pick whichever suits you.
+
+### The browser (no git, no Python)
+
+A [Streamlit](https://streamlit.io) console: drag in Excel sheets — one per season is
+fine — match your columns to the expected names, see what needs fixing, download a
+clean `player_seasons.csv`. Setup and deployment: [`app/README.md`](app/README.md).
+
+```bash
+.venv/bin/streamlit run app/streamlit_app.py    # or use the deployed URL
+```
+
+### The terminal
 
 1. Read [`docs/DATA_DICTIONARY.md`](docs/DATA_DICTIONARY.md) — it defines the three
    input tables (stats, contracts, injuries) and their required columns.
-2. Drop your Excel/CSV files into `data/raw/` (named `stats*`, `contracts*`, `injuries*`).
+2. Drop your Excel/CSV files into `data/raw/` (named `stats*`, `contracts*`, `injuries*`;
+   several files per table is fine).
 3. `python src/validate_raw.py` — tells you exactly what's missing or malformed.
 4. `python src/make_dataset.py` — builds `data/processed/player_seasons.csv`.
-5. Open Stata and run the do-files in `stata/` in order.
+
+### Then, either way
+
+Open Stata and run the do-files in `stata/` in order. The estimation is Stata's job —
+the web console's Python regression is only a preview to catch problems early.
 
 ## Repo map
 
@@ -52,7 +72,8 @@ verify the whole pipeline recovers it before touching real data.
 | `ROADMAP.md` | Step-by-step project guide with checkboxes — **start here** |
 | `docs/METHODOLOGY.md` | Hypotheses, research design, why FE regression and not ML |
 | `docs/DATA_DICTIONARY.md` | The data contract: required tables and columns |
-| `src/` | Python pipeline: validate → clean → features → tidy CSV |
+| `src/` | Python pipeline: ingest → clean → features → tidy CSV |
+| `app/` | Web console: the same pipeline, in a browser ([setup](app/README.md)) |
 | `stata/` | Estimation: main FE model, robustness checks, tables/figures |
 | `notebooks/01_eda.ipynb` | Exploratory checks before inference |
 

@@ -1,0 +1,3 @@
+# Local-only extras. Kept out of requirements.txt so Streamlit Cloud deploys stay fast.
+-r requirements.txt
+jupyter>=1.0

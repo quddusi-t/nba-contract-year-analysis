@@ -4,4 +4,7 @@ openpyxl>=3.1
 statsmodels>=0.14
 scipy>=1.11
 matplotlib>=3.8
-jupyter>=1.0
+
+# web console (app/) — Streamlit Community Cloud installs from this file
+streamlit>=1.40
+requests>=2.31

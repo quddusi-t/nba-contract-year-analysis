@@ -4,6 +4,9 @@ data/raw/*
 data/processed/*
 !data/processed/.gitkeep
 
+# secrets for the web console — never commit (password + GitHub token)
+.streamlit/secrets.toml
+
 # python
 .venv/
 __pycache__/

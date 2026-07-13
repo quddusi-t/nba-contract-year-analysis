@@ -9,11 +9,23 @@ The pipeline reads up to three tables from `data/raw/`. Files can be `.xlsx` or
 | `contracts` | Contract information | **yes** |
 | `injuries` | Injury / games missed | no (defaults to 0 missed) |
 
-Run `python src/validate_raw.py` after dropping files in — it checks everything
-below and prints a fix-list.
+**Several files may belong to one table.** A scrape usually produces one sheet per
+season — `stats_2019.xlsx`, `stats_2020.xlsx`, … — and all files whose name starts
+with `stats` are stacked into a single table. Columns are unioned, so a column present
+in only some seasons becomes empty for the others and the validator flags it.
+
+Two ways to run this:
+
+- **Terminal:** drop files into `data/raw/`, run `python src/validate_raw.py`, which
+  prints a fix-list, then `python src/make_dataset.py`.
+- **Browser:** the web console (`app/`) does the same thing with drag-and-drop, plus a
+  column-matching screen. Same code underneath — see `app/README.md`.
 
 Column names are matched case-insensitively and spaces/dashes are treated as
-underscores (`Player Name` → `player_name`).
+underscores (`Player Name` → `player_name`). Common alternative spellings are
+auto-detected (`MP` → `minutes`, `G` → `games`, `TRB` → `reb`); the full alias list is
+`ALIASES` in `src/ingest.py`. Anything unrecognized you map by hand in the console, or
+rename in the sheet before a terminal run.
 
 ---
 
@@ -48,7 +60,8 @@ At least one of `bpm` or the (`pts`,`reb`,`ast`) trio must be present.
 
 If your sheet has one row per *contract* (start year, end year) instead of one per
 season, that's fine — expand it to per-season rows in Excel or ask an AI assistant to
-add an expansion step in `src/clean.py`.
+add an expansion step in `src/clean.py`. (Neither the CLI nor the console does this
+expansion yet; it is the most likely first change once real data lands.)
 
 **Decisions to make once and document:** team/player options count as guaranteed or
 not (recommended: contract year = last *guaranteed* year); how to treat mid-season
