@@ -36,6 +36,21 @@ python -m venv .venv && .venv/bin/pip install -r requirements.txt
 The sample data has a known contract-year effect built in (~+0.8 BPM), so you can
 verify the whole pipeline recovers it before touching real data.
 
+## Rehearsing with messy data
+
+`data/sample/` is clean — it proves the *statistics* work. To test the *intake*, generate
+a realistically messy fake export (one sheet per season with no Season column, `Rk`/`G`/
+`MP`/`TRB` headers, traded players with `TOT` rows, accented names, salaries as text):
+
+```bash
+.venv/bin/python src/make_mock_upload.py     # -> data/mock/
+```
+
+Drag those files into the web console, or `cp data/mock/* data/raw/` and run the CLI. The
+same +0.8 effect is baked in, so if the pipeline doesn't recover it, the intake broke
+something. **Read the salary warning in the data dictionary** — that is the one input
+that silently produces a wrong answer, and it's why this harness exists.
+
 ## Two ways to get data in
 
 Both run the **same code** (`src/ingest.py` → `src/clean.py` → `src/features.py`), so

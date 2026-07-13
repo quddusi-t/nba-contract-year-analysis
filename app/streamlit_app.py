@@ -33,6 +33,7 @@ from features import MIN_GAMES, MIN_MINUTES_PG, build_features  # noqa: E402
 from ingest import (  # noqa: E402
     TABLE_SPECS,
     apply_mapping,
+    attach_season,
     concat_frames,
     suggest_mapping,
     validate_tables,
@@ -105,6 +106,7 @@ with tab_upload:
 
     if files:
         frames: dict[str, list[pd.DataFrame]] = {}
+        concat_warnings = []
         st.write("**Assign each file to a table:**")
         for i, f in enumerate(files):
             col_name, col_table, col_info = st.columns([3, 2, 3])
@@ -121,11 +123,18 @@ with tab_upload:
             except Exception as e:
                 col_info.error(f"Could not read: {e}")
                 continue
-            col_info.caption(f"{len(df):,} rows · {len(df.columns)} columns")
+
+            # a per-season export carries no Season column; take it from the filename
+            df, season_problems = attach_season(df, f.name, table)
+            concat_warnings += season_problems
+
+            note = f"{len(df):,} rows · {len(df.columns)} columns"
+            if season_problems and not season_problems[0].blocking:
+                note += f" · season **{int(df['season'].iloc[0])}** (from filename)"
+            col_info.caption(note)
             frames.setdefault(table, []).append(df)
 
         tables: dict[str, pd.DataFrame] = {}
-        concat_warnings = []
         for table, fs in frames.items():
             df, probs = concat_frames(fs, table)
             tables[table] = df

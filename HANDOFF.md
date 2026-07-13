@@ -57,6 +57,35 @@ front door that isn't a terminal. Added `app/` — a Streamlit console he reache
 **Still to do:** Kutsi must create the private data repo + token and deploy — the
 10-minute runbook is `app/README.md`. Nothing is deployed yet.
 
+## 🚨 The biggest risk to this project (found 2026-07-14)
+
+`src/make_mock_upload.py` was written to rehearse the intake before real data arrives:
+it fakes a realistic Basketball-Reference export (one sheet per season with no `Season`
+column, `Rk`/`G`/`MP`/`TRB` headers, traded players with `TOT` rows, accented names,
+salaries as `$40,000,000` text) with the same **+0.8 BPM** effect baked in.
+
+Running it surfaced the finding that matters most:
+
+> **A salary-per-season table is not contract data.** It cannot say where one contract
+> ends and the next begins. If you derive "contract ends in the player's last season
+> with a salary", you flag only each player's **final season**, every intermediate
+> contract year vanishes, and the effect washes out.
+
+On mock data with a true **+0.8** effect, that guess returned **−0.11** — significant-
+looking, plausible, and completely wrong. With proper contract boundaries and the *same
+messy stats sheets*, the pipeline recovers **+0.805**. So the intake mess is handled;
+the contracts table is the whole ballgame.
+
+The pipeline now **blocks** that input rather than guessing (`reshape_wide_contracts`
+detects salary runs longer than any legal NBA contract). **Before Arhan does anything
+else, confirm his contract data has real boundaries** — a `contract_end_season`, or a
+start year + length — not just salaries. Basketball-Reference's contracts page only
+shows each player's *current* deal, so it cannot supply history. Spotrac can.
+
+Also note: Basketball-Reference returns **HTTP 403 to automated fetches** — do not write
+a scraper. Their tables have a "Share & Export → Get table as CSV" button; that is the
+supported route, and almost certainly how Arhan got his sheets.
+
 ## The key decisions and why
 
 | Decision | Why |

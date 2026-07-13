@@ -4,6 +4,9 @@ data/raw/*
 data/processed/*
 !data/processed/.gitkeep
 
+# generated on demand by src/make_mock_upload.py — never committed
+data/mock/
+
 # secrets for the web console — never commit (password + GitHub token)
 .streamlit/secrets.toml
 
