@@ -18,20 +18,20 @@ TABLE_PREFIXES = {"stats": "stats", "contracts": "contracts", "injuries": "injur
 REQUIRED_TABLES = ("stats", "contracts")
 
 
-def find_tables(raw_dir: Path) -> dict[str, Path]:
-    """Map table name -> file path, based on filename prefix."""
-    tables: dict[str, Path] = {}
+def find_tables(raw_dir: Path) -> dict[str, list[Path]]:
+    """Map table name -> file paths, based on filename prefix.
+
+    Several files may match one table (a scrape usually produces one sheet per
+    season: stats_2019.xlsx, stats_2020.xlsx...). They are concatenated by
+    ingest.concat_frames, so order here is just sorted-by-filename.
+    """
+    tables: dict[str, list[Path]] = {}
     for path in sorted(raw_dir.iterdir()):
         if path.suffix.lower() not in (".csv", ".xlsx", ".xls"):
             continue
         for prefix, table in TABLE_PREFIXES.items():
             if path.stem.lower().startswith(prefix):
-                if table in tables:
-                    raise ValueError(
-                        f"Two files match table '{table}': {tables[table].name} and {path.name}. "
-                        "Keep one (or merge them) and re-run."
-                    )
-                tables[table] = path
+                tables.setdefault(table, []).append(path)
     return tables
 
 

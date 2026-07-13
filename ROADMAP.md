@@ -18,15 +18,26 @@ looks like, before fighting with real data.
 
 ## Phase 2 — Data intake
 
+Two routes, same result — use whichever you prefer.
+
+**Browser (no git or Python needed):** open the web console URL, drag in your sheets,
+match the columns, fix what it flags, download `player_seasons.csv`. Setup in
+`app/README.md`. This is the path if you don't want to touch a terminal.
+
+**Terminal:**
+
 - [ ] Read `docs/DATA_DICTIONARY.md` carefully
-- [ ] Export your scraped Excel sheets into `data/raw/` — one file per table,
-      named `stats*`, `contracts*`, `injuries*` (.xlsx or .csv both fine)
+- [ ] Export your scraped Excel sheets into `data/raw/`, named `stats*`, `contracts*`,
+      `injuries*` (.xlsx or .csv both fine; several files per table is fine too —
+      one sheet per season gets stacked automatically)
 - [ ] Run `python src/validate_raw.py` and fix everything it reports
 - [ ] Re-run until the validator passes
 
 **Watch out for:** player name inconsistencies across sheets ("Luka Dončić" vs
 "Luka Doncic"). If you don't have numeric player IDs, the pipeline builds them from
-normalized names — check the validator's duplicate warnings.
+normalized names — check the validator's duplicate warnings. Also watch for traded
+players appearing once per team plus a `TOT` row: that trips the duplicate check, and
+you want the `TOT` row only.
 
 ## Phase 3 — Cleaning & feature construction
 

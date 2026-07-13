@@ -31,6 +31,61 @@ hypothesis-testing structure.
    The naive paired comparison gives +1.12 on the same data (inflated by
    age/selection), which is a useful teaching contrast.
 
+## What was done in the web-console session (2026-07-14)
+
+Arhan can't use GitHub and there's no time to teach him, so the data work needed a
+front door that isn't a terminal. Added `app/` — a Streamlit console he reaches by URL.
+
+1. **Refactored the pipeline to be frames-in/frames-out.** `src/ingest.py` is new and
+   now owns multi-file concat, column mapping, and validation. `validate_raw.py` and
+   `clean.py` became thin adapters over it. The point: the CLI and the website call the
+   *same* functions, so they can never disagree about what valid data is. Change a data
+   rule in `src/`, and both follow.
+2. **Multiple files per table now work.** `find_tables()` used to *raise* if two files
+   matched one table; a scrape produces one sheet per season, so that was a wall. Files
+   are now stacked (columns unioned, gaps flagged). Verified: 16 per-season `.xlsx`
+   sheets → the same 591 rows as the single-file path.
+3. **The console** (`app/streamlit_app.py`): upload many sheets → assign each to a
+   table → match columns to canonical names (auto-guessed via `ALIASES`) → validation
+   as a fix-list → clean → download `player_seasons.csv` → save to a private data repo.
+   Password-gated (`app/auth.py`); storage is the GitHub Contents API (`app/storage.py`).
+4. **Verified:** the sample pipeline still recovers **+0.820, CI [0.614, 1.026]**
+   (unchanged), and the web flow reproduces that same number from per-season uploads.
+   The password gate rejects wrong passwords; the app degrades gracefully with no
+   secrets configured (open, save disabled).
+
+**Still to do:** Kutsi must create the private data repo + token and deploy — the
+10-minute runbook is `app/README.md`. Nothing is deployed yet.
+
+## 🚨 The biggest risk to this project (found 2026-07-14)
+
+`src/make_mock_upload.py` was written to rehearse the intake before real data arrives:
+it fakes a realistic Basketball-Reference export (one sheet per season with no `Season`
+column, `Rk`/`G`/`MP`/`TRB` headers, traded players with `TOT` rows, accented names,
+salaries as `$40,000,000` text) with the same **+0.8 BPM** effect baked in.
+
+Running it surfaced the finding that matters most:
+
+> **A salary-per-season table is not contract data.** It cannot say where one contract
+> ends and the next begins. If you derive "contract ends in the player's last season
+> with a salary", you flag only each player's **final season**, every intermediate
+> contract year vanishes, and the effect washes out.
+
+On mock data with a true **+0.8** effect, that guess returned **−0.11** — significant-
+looking, plausible, and completely wrong. With proper contract boundaries and the *same
+messy stats sheets*, the pipeline recovers **+0.805**. So the intake mess is handled;
+the contracts table is the whole ballgame.
+
+The pipeline now **blocks** that input rather than guessing (`reshape_wide_contracts`
+detects salary runs longer than any legal NBA contract). **Before Arhan does anything
+else, confirm his contract data has real boundaries** — a `contract_end_season`, or a
+start year + length — not just salaries. Basketball-Reference's contracts page only
+shows each player's *current* deal, so it cannot supply history. Spotrac can.
+
+Also note: Basketball-Reference returns **HTTP 403 to automated fetches** — do not write
+a scraper. Their tables have a "Share & Export → Get table as CSV" button; that is the
+supported route, and almost certainly how Arhan got his sheets.
+
 ## The key decisions and why
 
 | Decision | Why |
@@ -42,17 +97,23 @@ hypothesis-testing structure.
 | **Outcome is rate-based (`bpm`), never raw totals** | Minutes confound totals — players may get played more in contract years. If no composite exists in the real data, the pipeline builds a z-scored per-36 composite as fallback. |
 | **`post_contract_year` flag built into the pipeline** | Enables the "shirking" check (better before signing, worse after) — the two-findings-in-one-dataset angle from the original discussion. |
 | **Filters: games ≥ 20, minutes/game ≥ 10** | Rate stats are noise on tiny samples. Constants at the top of `src/features.py`; change deliberately and document. |
+| **Web console shares the pipeline's code, doesn't reimplement it** | Two copies of "what is valid data" would drift, and the drift would be silent and statistical. `src/ingest.py` is the single source of truth; `app/` is presentation only. |
+| **Data lives in a separate *private* repo, not this one** | The scraped sheets have unclear licensing and this repo is public. The app writes to a private data repo via a fine-grained token, so Arhan gets persistence without ever seeing git. |
+| **The console previews the FE model but does not replace Stata** | Stata can't run on free hosting, and the do-files are the deliverable the professors expect. Tab 5 is an early-warning check, labeled as such. |
 
 ## Current state
 
 - ✅ Pipeline, validator, sample data, quick inference: **working, verified**
+- ✅ Web console: **written and tested locally, not yet deployed** — needs the private
+  data repo + token + a Streamlit Cloud deploy (`app/README.md`)
 - ✅ Stata do-files: written and internally consistent, but **not executed** (no
   Stata in this environment) — first real Stata run may hit small syntax issues;
   fix them in place, the statistical logic is the deliverable
 - ⬜ Real data: **not yet arrived.** Everything from ROADMAP Phase 2 onward waits
   on Arhan's Excel sheets
 - ⬜ EDA notebook: skeleton with the four questions to answer; cells run but were
-  only exercised against sample data
+  only exercised against sample data. The console has **no EDA charts yet** — that is
+  the obvious next feature once real data lands
 
 ## Likely next steps (in order)
 
@@ -72,6 +133,11 @@ hypothesis-testing structure.
   temptation is pre-answered in METHODOLOGY.md. ML belongs only in optional
   Phase 8 (residual approach), after the statistics are done.
 - **Don't delete `data/sample/`** — it is the regression test for the pipeline.
+- **Don't put data rules in `app/`.** If the console needs to accept a new column
+  spelling or a new check, it goes in `src/ingest.py` so the CLI gets it too. The page
+  is presentation only. Two copies of the validation logic would drift silently.
+- **Never commit `.streamlit/secrets.toml`** (password + GitHub token). It's gitignored;
+  keep it that way. The token should be fine-grained and scoped to the data repo alone.
 - `.gitignore` keeps `data/raw/` and `data/processed/` out of git deliberately:
   the scraped data may have unclear licensing, and the repo is public. Keep it out.
 - Keep the writing level at "strong undergrad": Arhan should be able to defend

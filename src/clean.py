@@ -1,4 +1,9 @@
-"""Load raw tables, normalize identifiers, merge into one player-season frame."""
+"""Normalize identifiers and merge the raw tables into one player-season frame.
+
+merge_tables() is the real work and takes DataFrames, so the web console can call
+it on uploads that never touch disk. load_and_merge() is the thin filesystem
+adapter used by the CLI.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +11,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from common import REQUIRED_TABLES, find_tables, load_table, normalize_name
+from common import normalize_name
+from ingest import REQUIRED_TABLES, read_frames
 
 
 def _ensure_player_id(df: pd.DataFrame, name_to_id: dict[str, int], table: str) -> pd.DataFrame:
@@ -27,17 +33,25 @@ def _ensure_player_id(df: pd.DataFrame, name_to_id: dict[str, int], table: str) 
 
 
 def load_and_merge(raw_dir: Path) -> pd.DataFrame:
-    tables = find_tables(raw_dir)
+    """Filesystem adapter: read data/raw/ (or data/sample/) and merge it."""
+    tables, _ = read_frames(raw_dir)
     missing = [t for t in REQUIRED_TABLES if t not in tables]
     if missing:
         raise FileNotFoundError(
             f"Missing required table(s) {missing} in {raw_dir}. "
             "Files must be named stats*, contracts* (and optionally injuries*)."
         )
+    return merge_tables(tables["stats"], tables["contracts"], tables.get("injuries"))
 
-    stats = load_table(tables["stats"])
-    contracts = load_table(tables["contracts"])
-    injuries = load_table(tables["injuries"]) if "injuries" in tables else None
+
+def merge_tables(
+    stats: pd.DataFrame,
+    contracts: pd.DataFrame,
+    injuries: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """Merge the three tables on (player_id, season). Frames in, one frame out."""
+    stats = stats.copy()
+    contracts = contracts.copy()
 
     # build the name -> id map from the stats table (the identity source of truth)
     if "player_id" not in stats.columns:
@@ -69,7 +83,7 @@ def load_and_merge(raw_dir: Path) -> pd.DataFrame:
         how="left",
     )
 
-    if injuries is not None:
+    if injuries is not None and not injuries.empty:
         injuries = _ensure_player_id(injuries, name_to_id, "injuries")
         injuries["season"] = pd.to_numeric(injuries["season"], errors="raise").astype(int)
         merged = merged.merge(
