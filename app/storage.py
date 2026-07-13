@@ -113,24 +113,45 @@ def delete_file(path: str, message: str) -> None:
     )
 
 
-def replace_raw(files: list[tuple[str, bytes]], message: str) -> tuple[int, int]:
-    """Make raw/ mirror exactly this upload: write the new files, delete stragglers.
+def save_session(
+    session_id: str,
+    files: list[tuple[str, bytes]],
+    csv: bytes,
+    log_md: str,
+) -> str:
+    """Archive one working session under sessions/<session_id>/.
 
-    Deliberately NOT additive. If saves piled up, a later collaborator pulling the repo
-    would find one upload's sheets mixed with another's and no way to tell which is
-    which. Nothing is lost by replacing: git keeps every previous version in history.
+    Every session is kept in its own folder rather than overwriting the last one:
+    uploads get iterated on (fix a sheet, re-upload, rebuild), and being able to go
+    back to what was uploaded on Tuesday — together with the log of what the pipeline
+    did to it — is the difference between "the numbers changed" and "we know why the
+    numbers changed".
 
-    Returns (written, deleted).
+    processed/player_seasons.csv is also updated as a convenience pointer to the most
+    recent build, so there is always one obvious file to hand to Stata.
     """
-    keep = {name for name, _ in files}
+    base = f"sessions/{session_id}"
     for name, blob in files:
-        put_file(f"raw/{name}", blob, message)
+        put_file(f"{base}/raw/{name}", blob, f"data({session_id}): upload {name}")
+    put_file(f"{base}/player_seasons.csv", csv, f"data({session_id}): built dataset")
+    put_file(f"{base}/session_log.md", log_md.encode(), f"data({session_id}): log")
+    put_file("processed/player_seasons.csv", csv, f"data: latest build ({session_id})")
+    return base
 
-    stale = [f for f in list_dir("raw") if Path(f.path).name not in keep | {".gitkeep"}]
-    for f in stale:
-        delete_file(f.path, f"data: drop {Path(f.path).name} (not in the latest upload)")
 
-    return len(files), len(stale)
+def list_sessions() -> list[str]:
+    """Session folder names, newest first (ids are timestamps, so this sorts)."""
+    r = requests.get(
+        f"{API}/repos/{repo_name()}/contents/sessions", headers=_headers(), timeout=TIMEOUT
+    )
+    if r.status_code != 200:
+        return []
+    entries = r.json()
+    if not isinstance(entries, list):
+        return []
+    return sorted(
+        (e["name"] for e in entries if e.get("type") == "dir"), reverse=True
+    )
 
 
 def get_file(path: str) -> bytes | None:
