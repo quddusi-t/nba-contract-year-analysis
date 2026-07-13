@@ -29,8 +29,11 @@ def check_password() -> bool:
         st.session_state["authenticated"] = True
         return True
 
-    st.title("Contract-Year Data Console")
-    st.caption("Ask Kutsi for the password.")
+    st.title("🏀 Contract-Year Data Console")
+    st.markdown(
+        "**Hi Arhan** — this is where your NBA spreadsheets get turned into the clean "
+        "dataset for your contract-year study.\n\nKutsi has the password."
+    )
 
     with st.form("login"):
         attempt = st.text_input("Password", type="password")

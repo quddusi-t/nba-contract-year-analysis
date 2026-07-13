@@ -21,6 +21,7 @@ from __future__ import annotations
 import base64
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 import requests
 import streamlit as st
@@ -97,6 +98,39 @@ def put_file(path: str, content: bytes, message: str) -> None:
             f"GitHub rejected the upload of {path} ({r.status_code}): "
             f"{r.json().get('message', r.text)}"
         )
+
+
+def delete_file(path: str, message: str) -> None:
+    """Remove one file from the data repo. Silently ignores a file that isn't there."""
+    sha = _sha(path)
+    if not sha:
+        return
+    requests.delete(
+        f"{API}/repos/{repo_name()}/contents/{path}",
+        headers=_headers(),
+        json={"message": message, "sha": sha},
+        timeout=TIMEOUT,
+    )
+
+
+def replace_raw(files: list[tuple[str, bytes]], message: str) -> tuple[int, int]:
+    """Make raw/ mirror exactly this upload: write the new files, delete stragglers.
+
+    Deliberately NOT additive. If saves piled up, a later collaborator pulling the repo
+    would find one upload's sheets mixed with another's and no way to tell which is
+    which. Nothing is lost by replacing: git keeps every previous version in history.
+
+    Returns (written, deleted).
+    """
+    keep = {name for name, _ in files}
+    for name, blob in files:
+        put_file(f"raw/{name}", blob, message)
+
+    stale = [f for f in list_dir("raw") if Path(f.path).name not in keep | {".gitkeep"}]
+    for f in stale:
+        delete_file(f.path, f"data: drop {Path(f.path).name} (not in the latest upload)")
+
+    return len(files), len(stale)
 
 
 def get_file(path: str) -> bytes | None:
