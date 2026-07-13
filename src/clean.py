@@ -48,10 +48,21 @@ def merge_tables(
     stats: pd.DataFrame,
     contracts: pd.DataFrame,
     injuries: pd.DataFrame | None = None,
+    report: list[str] | None = None,
 ) -> pd.DataFrame:
-    """Merge the three tables on (player_id, season). Frames in, one frame out."""
+    """Merge the three tables on (player_id, season). Frames in, one frame out.
+
+    Pass `report` to collect a human-readable account of every row this step drops.
+    Silent drops are how a dataset quietly stops meaning what you think it means, so
+    the web console shows this to the user and saves it alongside the data.
+    """
     stats = stats.copy()
     contracts = contracts.copy()
+
+    def note(msg: str) -> None:
+        print(msg)
+        if report is not None:
+            report.append(msg)
 
     # build the name -> id map from the stats table (the identity source of truth)
     if "player_id" not in stats.columns:
@@ -82,6 +93,8 @@ def merge_tables(
         on=["player_id", "season"],
         how="left",
     )
+    note(f"Merged {len(stats)} stats rows with {len(contracts)} contracts rows "
+         f"on (player, season).")
 
     if injuries is not None and not injuries.empty:
         injuries = _ensure_player_id(injuries, name_to_id, "injuries")
@@ -91,16 +104,23 @@ def merge_tables(
             on=["player_id", "season"],
             how="left",
         )
+        missing_inj = int(merged["games_missed"].isna().sum())
+        if missing_inj:
+            note(f"{missing_inj} player-seasons had no injury record — games_missed set "
+                 "to 0 for them (the only value this pipeline ever fills in).")
+    else:
+        note("No injuries table — games_missed set to 0 for every season.")
+
     merged["games_missed"] = (
         merged.get("games_missed", pd.Series(0, index=merged.index)).fillna(0).astype(int)
     )
 
-    no_contract = merged["contract_end_season"].isna().sum()
+    no_contract = int(merged["contract_end_season"].isna().sum())
     if no_contract:
-        print(
-            f"WARNING: dropping {no_contract} player-seasons with no contract info "
-            "(cannot label them contract year or not)."
-        )
+        note(f"DROPPED {no_contract} player-seasons with no matching contract record. "
+             "Without a contract end year they cannot be labelled contract year or not, "
+             "so they cannot be used. If this number is large, your contracts table is "
+             "missing players or seasons that your stats table has.")
         merged = merged.dropna(subset=["contract_end_season"])
     merged["contract_end_season"] = merged["contract_end_season"].astype(int)
 
