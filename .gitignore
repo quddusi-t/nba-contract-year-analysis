@@ -1,0 +1,19 @@
+# real data stays local — only the synthetic sample is committed
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+
+# python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.ipynb_checkpoints/
+
+# stata
+stata/output/
+*.log
+*.ster
+
+.DS_Store
