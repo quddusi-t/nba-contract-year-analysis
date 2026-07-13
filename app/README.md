@@ -1,5 +1,8 @@
 # The web console
 
+**Live: https://nba-contract-console.streamlit.app** (password-gated — ask Kutsi.)
+Data lands in the private repo **quddusi-t/nba-contract-data**.
+
 A browser front-end to the same pipeline `src/` runs, so a collaborator can do the
 data work **without git, Python, or a terminal**. They open a URL, drag in Excel
 sheets, and get a validated `player_seasons.csv` back.

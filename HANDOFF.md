@@ -104,8 +104,13 @@ supported route, and almost certainly how Arhan got his sheets.
 ## Current state
 
 - ✅ Pipeline, validator, sample data, quick inference: **working, verified**
-- ✅ Web console: **written and tested locally, not yet deployed** — needs the private
-  data repo + token + a Streamlit Cloud deploy (`app/README.md`)
+- ✅ Web console: **deployed and verified end-to-end** (2026-07-14)
+  - Live at **https://nba-contract-console.streamlit.app** (password-gated; ask Kutsi)
+  - Data repo: **https://github.com/quddusi-t/nba-contract-data** (private)
+  - Verified by pushing the messy mock export through the live app: it recovered
+    **+0.805 BPM, CI [0.603, 1.006]** (true baked-in effect: +0.8), and the
+    `player_seasons.csv` it produced is **byte-identical** to the local CLI's output.
+    Raw uploads + the processed CSV landed in the data repo. The whole loop works.
 - ✅ Stata do-files: written and internally consistent, but **not executed** (no
   Stata in this environment) — first real Stata run may hit small syntax issues;
   fix them in place, the statistical logic is the deliverable
