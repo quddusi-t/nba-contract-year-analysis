@@ -113,26 +113,38 @@ def delete_file(path: str, message: str) -> None:
     )
 
 
-def save_session(
-    session_id: str,
-    files: list[tuple[str, bytes]],
-    csv: bytes,
-    log_md: str,
-) -> str:
-    """Archive one working session under sessions/<session_id>/.
+def save_raw(session_id: str, files: list[tuple[str, bytes]], progress=None) -> str:
+    """Archive the uploaded sheets under sessions/<session_id>/raw/, before anything else.
 
-    Every session is kept in its own folder rather than overwriting the last one:
-    uploads get iterated on (fix a sheet, re-upload, rebuild), and being able to go
-    back to what was uploaded on Tuesday — together with the log of what the pipeline
-    did to it — is the difference between "the numbers changed" and "we know why the
-    numbers changed".
+    Deliberately called at UPLOAD time, not at build time. If the pipeline then chokes
+    on his data, we already have the exact files that broke it and can debug them
+    ourselves — far better than asking him to describe his spreadsheet over chat, or to
+    edit it blind. The raw sheets are the one artefact that is never reproducible.
 
-    processed/player_seasons.csv is also updated as a convenience pointer to the most
-    recent build, so there is always one obvious file to hand to Stata.
+    `progress` is an optional callback(i, total, name): each file is a couple of HTTP
+    round-trips, so a dozen sheets takes a noticeable few seconds and the user needs to
+    see it moving.
     """
     base = f"sessions/{session_id}"
-    for name, blob in files:
+    for i, (name, blob) in enumerate(files, start=1):
+        if progress:
+            progress(i, len(files), name)
         put_file(f"{base}/raw/{name}", blob, f"data({session_id}): upload {name}")
+    return f"{base}/raw"
+
+
+def save_build(session_id: str, csv: bytes, log_md: str) -> str:
+    """Archive the built dataset and the session log alongside the raw sheets.
+
+    Sessions are kept in their own folder rather than overwriting the last one: uploads
+    get iterated on (fix a sheet, re-upload, rebuild), and being able to go back to what
+    was uploaded on Tuesday — together with the log of what the pipeline did to it — is
+    the difference between "the numbers changed" and "we know why they changed".
+
+    processed/player_seasons.csv is also updated as a pointer to the most recent build,
+    so there is always one obvious file to hand to Stata.
+    """
+    base = f"sessions/{session_id}"
     put_file(f"{base}/player_seasons.csv", csv, f"data({session_id}): built dataset")
     put_file(f"{base}/session_log.md", log_md.encode(), f"data({session_id}): log")
     put_file("processed/player_seasons.csv", csv, f"data: latest build ({session_id})")

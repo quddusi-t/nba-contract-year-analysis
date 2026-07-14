@@ -312,6 +312,54 @@ with tab_upload:
             for p in concat_warnings:
                 st.warning(f"**{p.table}** — {p.message}\n\n{p.fix}", icon="⚠️")
 
+        # Send the raw sheets NOW, before anything can go wrong with them. If the
+        # pipeline later rejects his data, Kutsi already has the exact files that broke
+        # it and can look for himself, instead of asking Arhan to describe or edit them.
+        st.divider()
+        st.markdown("#### 📤 Send these files to Kutsi — do this first")
+        st.markdown(
+            "**Send your original sheets now, before doing anything else.** Even if the "
+            "next steps go wrong, Kutsi will have exactly what you uploaded and can "
+            "sort it out himself — you won't have to change your spreadsheets or explain "
+            "what's in them."
+        )
+
+        if not storage.is_configured():
+            st.info("Sharing isn't set up on this deployment, so there's nothing to send.")
+        elif st.session_state.get("raw_saved"):
+            st.success(
+                f"**SAVED** — your {len(st.session_state.get('uploaded', []))} file(s) "
+                f"are safely in the shared folder (`{st.session_state['raw_saved']}`).",
+                icon="✅",
+            )
+        else:
+            st.warning(
+                "**This takes a little while** — the files go up one at a time, so a "
+                "dozen sheets is a few seconds each. **Don't leave the page or click "
+                "away until you see SAVED in green.**",
+                icon="⏳",
+            )
+            if st.button("📤 Send my files now", type="primary"):
+                bar = st.progress(0.0, text="Starting…")
+
+                def tick(i, total, name):
+                    bar.progress(i / total, text=f"Sending {name} ({i} of {total})…")
+
+                try:
+                    where = storage.save_raw(
+                        st.session_state["session_id"],
+                        st.session_state["uploaded"],
+                        progress=tick,
+                    )
+                    st.session_state["raw_saved"] = where
+                    bar.empty()
+                    st.rerun()
+                except Exception as e:
+                    bar.empty()
+                    st.session_state["crash"] = traceback.format_exc()
+                    st.error(f"Sending failed: {e}")
+                    st.caption("Send Kutsi the error on the **📋 What the app did** tab.")
+
         st.success("Files loaded. Now go to **2 · Match columns**.", icon="✅")
 
 # ---------------------------------------------------------- 2. column mapping
@@ -484,7 +532,10 @@ with tab_build:
             "controls the model needs.\n\n"
             "**Click all three buttons below, left to right.** They do different "
             "things and you need all three. Buttons 2 and 3 stay switched off until "
-            "you've pressed 1."
+            "you've pressed 1.\n\n"
+            "**Saving takes a few seconds — wait for the green SAVED message** before "
+            "you leave the page. (Your original sheets already went up in step 1; this "
+            "adds the dataset you just built and the log of what the app did to it.)"
         )
         st.caption(
             f"While building, seasons with fewer than {MIN_GAMES} games or under "
@@ -531,19 +582,22 @@ with tab_build:
 
         with c3:
             st.markdown("**3️⃣ Save**")
-            st.caption("Archive it for Kutsi.")
+            st.caption("Archive the result for Kutsi.")
             can_save = built is not None and storage.is_configured()
             if st.button("Save this session", disabled=not can_save,
                          use_container_width=True):
                 try:
-                    with st.spinner("Saving…"):
-                        where = storage.save_session(
-                            st.session_state["session_id"],
-                            st.session_state.get("uploaded", []),
-                            csv,
-                            session_log_md(),
+                    with st.spinner("Saving… wait for the green SAVED message."):
+                        # your sheets normally went up in step 1; catch the case where
+                        # that was skipped, so a session is never archived without them
+                        if not st.session_state.get("raw_saved"):
+                            st.session_state["raw_saved"] = storage.save_raw(
+                                st.session_state["session_id"],
+                                st.session_state.get("uploaded", []),
+                            )
+                        st.session_state["saved"] = storage.save_build(
+                            st.session_state["session_id"], csv, session_log_md()
                         )
-                        st.session_state["saved"] = where
                     st.rerun()
                 except Exception as e:
                     st.session_state["crash"] = traceback.format_exc()
@@ -580,9 +634,9 @@ with tab_build:
             saved = st.session_state.get("saved")
             if saved:
                 st.success(
-                    f"**Saved to `{saved}/`** in {storage.repo_name()} — your original "
+                    f"**SAVED** to `{saved}/` in {storage.repo_name()} — your original "
                     "sheets, the built dataset, and the log of what the app did. "
-                    "Earlier sessions are kept, not overwritten.",
+                    "Earlier sessions are kept, not overwritten. You're done here.",
                     icon="✅",
                 )
             elif not storage.is_configured():
