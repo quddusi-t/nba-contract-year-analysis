@@ -591,11 +591,20 @@ with tab_build:
                     "Downloading with button 2 still works — send Kutsi the file."
                 )
 
-            st.markdown("**A first look at the data** (first 50 rows):")
-            st.dataframe(built.head(50), use_container_width=True)
+            st.markdown("**A first look at the data** — 50 rows picked at random:")
+            # A random sample, not the first 50 rows. The file is sorted by player, and
+            # player ids are assigned alphabetically, so head(50) would only ever show
+            # you the handful of players whose names sort first — useless for spotting
+            # whether the data looks right. Fixed seed so it doesn't reshuffle on rerun.
+            sample = built.sample(min(50, len(built)), random_state=0)
+            st.dataframe(
+                sample.sort_values(["player_name", "season"]), use_container_width=True
+            )
             st.caption(
                 "`contract_year` is the column the whole project is about: 1 if that "
-                "season was the last year of his contract, 0 otherwise."
+                "season was the last year of his contract, 0 otherwise. Scan a player "
+                "you know: does his contract year land where you'd expect? That check "
+                "is worth more than any test the app can run for you."
             )
 
 # ------------------------------------------------------- 5. inference preview
