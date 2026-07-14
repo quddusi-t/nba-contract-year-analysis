@@ -90,6 +90,23 @@ save-to-shared-repo step is disabled — the upload → clean → download flow 
 To test with secrets, create `.streamlit/secrets.toml` with the block from step 3;
 it is gitignored.
 
+## After you merge a change: REBOOT, don't just refresh
+
+Streamlit Cloud picks up a new commit by re-running the **main script**. Modules already
+imported into the Python process — everything in `src/` (`ingest`, `clean`, `features`) —
+stay cached in `sys.modules` from before. So the page updates while the pipeline
+underneath it does not, and you get errors like:
+
+    TypeError: merge_tables() got an unexpected keyword argument 'report'
+
+which look like a code bug but are a stale import. A browser hard-refresh cannot fix it;
+the stale module is on the server.
+
+**Any change to `src/` needs a reboot:** share.streamlit.io → your app → **⋮** →
+**Reboot app**. That restarts the process and re-imports everything. Changes confined to
+`app/` hot-reload fine — but since almost all real changes touch `src/`, just reboot by
+default after merging.
+
 ## Notes on the free tier
 
 - The app **sleeps after ~7 days idle** and wakes on the next visit (slow first load).
