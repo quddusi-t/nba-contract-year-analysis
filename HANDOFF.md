@@ -1,8 +1,13 @@
 # HANDOFF — project history, context, and current state
 
-*Written 2026-07-13 by Claude (Fable 5), the session that scaffolded this repo.
-Audience: future Claude/Opus/Sonnet sessions and human collaborators. Read this,
-then `docs/METHODOLOGY.md`, before changing anything.*
+*Started 2026-07-13 by the session that scaffolded this repo; updated 2026-07-14 by the
+session that built and deployed the web console. Audience: future Claude sessions and
+human collaborators. Read this, then `docs/METHODOLOGY.md`, before changing anything.*
+
+**If you read only one thing:** the pipeline works and the console is live, but the
+project's viability rests on a single unanswered question — whether Arhan's contract data
+contains real contract boundaries or merely salaries. See
+[🚨 The biggest risk](#-the-biggest-risk-to-this-project-found-2026-07-14).
 
 ## What this project is
 
@@ -31,31 +36,67 @@ hypothesis-testing structure.
    The naive paired comparison gives +1.12 on the same data (inflated by
    age/selection), which is a useful teaching contrast.
 
-## What was done in the web-console session (2026-07-14)
+## What was done in the web-console session (2026-07-14, PRs #2–#7)
 
-Arhan can't use GitHub and there's no time to teach him, so the data work needed a
+Arhan can't use GitHub and there was no time to teach him, so the data work needed a
 front door that isn't a terminal. Added `app/` — a Streamlit console he reaches by URL.
+**It is deployed and working; the whole loop has been verified end-to-end on the live
+app, not just locally.**
 
-1. **Refactored the pipeline to be frames-in/frames-out.** `src/ingest.py` is new and
-   now owns multi-file concat, column mapping, and validation. `validate_raw.py` and
-   `clean.py` became thin adapters over it. The point: the CLI and the website call the
-   *same* functions, so they can never disagree about what valid data is. Change a data
-   rule in `src/`, and both follow.
-2. **Multiple files per table now work.** `find_tables()` used to *raise* if two files
-   matched one table; a scrape produces one sheet per season, so that was a wall. Files
-   are now stacked (columns unioned, gaps flagged). Verified: 16 per-season `.xlsx`
-   sheets → the same 591 rows as the single-file path.
-3. **The console** (`app/streamlit_app.py`): upload many sheets → assign each to a
-   table → match columns to canonical names (auto-guessed via `ALIASES`) → validation
-   as a fix-list → clean → download `player_seasons.csv` → save to a private data repo.
-   Password-gated (`app/auth.py`); storage is the GitHub Contents API (`app/storage.py`).
-4. **Verified:** the sample pipeline still recovers **+0.820, CI [0.614, 1.026]**
-   (unchanged), and the web flow reproduces that same number from per-season uploads.
-   The password gate rejects wrong passwords; the app degrades gracefully with no
-   secrets configured (open, save disabled).
+### The architecture decision that matters
 
-**Still to do:** Kutsi must create the private data repo + token and deploy — the
-10-minute runbook is `app/README.md`. Nothing is deployed yet.
+**The console shares the pipeline's code; it does not reimplement it.** `src/ingest.py`
+is new and owns multi-file concat, column mapping, and validation. `validate_raw.py` and
+`clean.py` became thin adapters over it. The CLI and the website call the *same*
+functions, so they cannot disagree about what valid data is — and any drift between two
+copies would have been silent *and statistical*, the worst kind. `app/` is presentation
+only. **Change a data rule in `src/`, and both follow.**
+
+### What the console does
+
+Upload many sheets → assign each to a table → match columns (auto-guessed via `ALIASES`)
+→ validation as a plain-language fix-list → build → download `player_seasons.csv` →
+archive the session to the private data repo. Then two teaching tabs: **6 · Next: Stata**
+(serves the do-files with explanations, the one-tailed halving rule, "never report a
+p-value without an effect size", the limitations worth stating) and **📋 What the app
+did** (the audit log, below). Password-gated (`app/auth.py`); storage is the GitHub
+Contents API (`app/storage.py`).
+
+### Real gaps this session found and closed
+
+1. **Multiple files per table.** `find_tables()` used to *raise* if two files matched one
+   table — but a scrape produces one sheet per season, so that was a wall for the CLI
+   too. Files are now stacked (columns unioned, gaps flagged).
+2. **Per-season exports carry no `Season` column.** The season only exists in the
+   *filename*. It's now read from there and reported loudly, because an off-by-one here
+   shifts every contract-year flag and quietly ruins the result.
+3. **Traded players** arrive as one row per team *plus* a `TOT` season-total row, which
+   tripped the duplicate check. The total is kept, the partials dropped — a partial row
+   would understate his games and minutes.
+4. **The CLI now auto-applies the alias mapping**, so a raw Basketball-Reference export
+   (`Player`/`G`/`MP`/`TRB`) works without hand-editing headers.
+5. **Nothing is dropped silently any more.** `merge_tables()` and `build_features()` take
+   an optional `report` list and record every row they drop and why. Shown on the
+   **📋 What the app did** tab and archived with the data. "Why are there fewer
+   player-seasons than I uploaded?" now always has an answer.
+
+### How data is stored
+
+Each save is archived under `sessions/<timestamp>/` in the private repo — the original
+sheets, the built dataset, and the session log. **Nothing is overwritten.** Uploads get
+iterated on, and being able to see what Tuesday's numbers came from is the difference
+between "the numbers changed" and "we know why they changed."
+`processed/player_seasons.csv` is kept updated as a pointer to the latest build, so
+there's always one obvious file to hand to Stata.
+
+### Verification (all on the live app, with the messy mock export)
+
+- Recovered **+0.805 BPM, CI [0.603, 1.006]** against a true baked-in effect of **+0.8**.
+- The `player_seasons.csv` the cloud app produced is **byte-identical** to the local
+  CLI's output from the same inputs — the two really do run the same code.
+- The salary-grid trap is **refused** at step 3, on the live app.
+- The password gate rejects wrong passwords; the sample pipeline still recovers
+  **+0.820, CI [0.614, 1.026]** (unchanged since the scaffold).
 
 ## 🚨 The biggest risk to this project (found 2026-07-14)
 
@@ -101,49 +142,77 @@ supported route, and almost certainly how Arhan got his sheets.
 | **Data lives in a separate *private* repo, not this one** | The scraped sheets have unclear licensing and this repo is public. The app writes to a private data repo via a fine-grained token, so Arhan gets persistence without ever seeing git. |
 | **The console previews the FE model but does not replace Stata** | Stata can't run on free hosting, and the do-files are the deliverable the professors expect. Tab 5 is an early-warning check, labeled as such. |
 
-## Current state
+## Current state (end of 2026-07-14)
 
 - ✅ Pipeline, validator, sample data, quick inference: **working, verified**
-- ✅ Web console: **deployed and verified end-to-end** (2026-07-14)
-  - Live at **https://nba-contract-console.streamlit.app** (password-gated; ask Kutsi)
+- ✅ **Web console: live and fully verified.**
+  - **https://nba-contract-console.streamlit.app** — password-gated (ask Kutsi)
   - Data repo: **https://github.com/quddusi-t/nba-contract-data** (private)
-  - Verified by pushing the messy mock export through the live app: it recovered
-    **+0.805 BPM, CI [0.603, 1.006]** (true baked-in effect: +0.8), and the
-    `player_seasons.csv` it produced is **byte-identical** to the local CLI's output.
-    Raw uploads + the processed CSV landed in the data repo. The whole loop works.
-- ✅ Stata do-files: written and internally consistent, but **not executed** (no
-  Stata in this environment) — first real Stata run may hit small syntax issues;
-  fix them in place, the statistical logic is the deliverable
-- ⬜ Real data: **not yet arrived.** Everything from ROADMAP Phase 2 onward waits
-  on Arhan's Excel sheets
-- ⬜ EDA notebook: skeleton with the four questions to answer; cells run but were
-  only exercised against sample data. The console has **no EDA charts yet** — that is
-  the obvious next feature once real data lands
+  - Deploy/runbook, secrets, and the reboot gotcha: `app/README.md`
+- ✅ Mock harness (`src/make_mock_upload.py`): fakes a realistic messy export with a
+  known +0.8 effect. **This is the intake's regression test** — it caught a wrong answer
+  before real data ever arrived (see the risk section above)
+- ✅ Stata do-files: written and internally consistent, but **never executed** (no Stata
+  in this environment) — the first real run may hit small syntax issues; fix them in
+  place, the statistical logic is the deliverable
+- ⬜ **Real data: not yet arrived.** Arhan is being asked on 2026-07-15 whether his
+  contract data has real boundaries or only salaries. Everything downstream waits on
+  that answer
+- ⬜ EDA charts: the notebook skeleton exists but was only run against sample data. The
+  console has **no EDA charts yet** — the obvious next feature once real data lands
 
 ## Likely next steps (in order)
 
-1. Arhan drops his sheets into `data/raw/`, runs the validator, fixes what it flags.
-   Expect the messy part to be **contract data shaped one-row-per-contract** rather
-   than per-season — if so, add an expansion step in `src/clean.py` (noted in
-   DATA_DICTIONARY.md).
-2. Spot-check the contract-year flag against Spotrac/Basketball-Reference for a few
-   known players. The flag definition (last *guaranteed* year; option years excluded)
-   is a judgment call — whatever rule is used must be stated in the writeup.
-3. Run the Stata sequence; halve two-tailed p-values when reporting (H₁ is one-tailed).
-4. Robustness table + coefplot → writeup per ROADMAP Phase 7.
+1. **Ask Arhan the one question that decides the project: does his contract data carry
+   contract boundaries (an end year, or a start year + length), or only salary per
+   season?** If it's salaries only, the study cannot proceed as designed and he needs
+   Spotrac contract history. See the risk section above — this is not a detail.
+2. He uploads through the console (he does **not** need `data/raw/` or the CLI). Read
+   the warnings on the check tab; they are the ones that catch silent errors.
+3. **Spot-check the contract-year flag against Spotrac for a few players he knows.** The
+   flag definition (last *guaranteed* year; option years excluded) is a judgment call —
+   whatever rule is used must be stated in the writeup. No automated check substitutes
+   for this.
+4. Run the Stata sequence; halve two-tailed p-values when reporting (H₁ is one-tailed).
+5. Robustness table + coefplot → writeup per ROADMAP Phase 7.
+
+Still expected as a possible mess: **contract data shaped one-row-per-contract**
+(start year, end year). The console handles *wide salary grids* and *long per-season*
+contracts, but not per-contract rows yet — that expansion step would go in
+`src/ingest.py` (never in `app/`).
 
 ## Warnings for future sessions
 
 - **Do not "upgrade" the main analysis to LGBM/XGBoost/neural nets.** That
   temptation is pre-answered in METHODOLOGY.md. ML belongs only in optional
   Phase 8 (residual approach), after the statistics are done.
-- **Don't delete `data/sample/`** — it is the regression test for the pipeline.
+- **Don't delete `data/sample/`** — it is the regression test for the statistics.
+  **Don't delete `src/make_mock_upload.py`** — it is the regression test for the
+  *intake*, and it has already earned its keep by catching a wrong answer.
 - **Don't put data rules in `app/`.** If the console needs to accept a new column
   spelling or a new check, it goes in `src/ingest.py` so the CLI gets it too. The page
   is presentation only. Two copies of the validation logic would drift silently.
+- **Never impute a performance value.** The only value the pipeline fills in is
+  `games_missed → 0`. Imputing BPM would fabricate the very thing being measured. Rows
+  with a missing outcome are kept in the file and ignored by the regression — and now
+  *reported*, not dropped in silence.
+- **After merging anything that touches `src/`, REBOOT the Streamlit app** (dashboard →
+  ⋮ → Reboot app). Streamlit Cloud re-runs the main script on a new commit but keeps
+  already-imported modules cached, so the page updates while the pipeline underneath it
+  doesn't. This produces errors that look like code bugs but are stale imports
+  (`TypeError: merge_tables() got an unexpected keyword argument 'report'`). A browser
+  hard-refresh cannot fix it — the stale module is server-side. Full note in
+  `app/README.md`.
 - **Never commit `.streamlit/secrets.toml`** (password + GitHub token). It's gitignored;
-  keep it that way. The token should be fine-grained and scoped to the data repo alone.
-- `.gitignore` keeps `data/raw/` and `data/processed/` out of git deliberately:
-  the scraped data may have unclear licensing, and the repo is public. Keep it out.
+  keep it that way. The token is fine-grained and scoped to the data repo alone, so a
+  leak's blast radius is one private repo of NBA stats — keep it that way too.
+- `.gitignore` keeps `data/raw/`, `data/processed/`, and `data/mock/` out of git
+  deliberately: the scraped data may have unclear licensing, and this repo is public.
+  Real data belongs in the private data repo. Keep it out of here.
+- **Basketball-Reference returns HTTP 403 to automated fetches — do not write a
+  scraper.** Their tables have a "Share & Export → Get table as CSV" button; that's the
+  supported route, and almost certainly how Arhan got his sheets.
 - Keep the writing level at "strong undergrad": Arhan should be able to defend
-  every line to his professors. Explaining beats impressing.
+  every line to his professors. Explaining beats impressing. The console's tone is
+  deliberately explanatory for the same reason — it is a teaching surface, not just a
+  tool.
